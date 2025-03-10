@@ -278,3 +278,47 @@ class TDSConvEncoder(nn.Module):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.tds_conv_blocks(inputs)  # (T, N, num_features)
+
+class TDSGRUEncoder(nn.Module):
+    """
+    A GRU-based encoder that processes input sequences of shape (T, N, n_features).
+
+    Args:
+        input_size (int): The number of input features per time step (n_features).
+        hidden_size (int): The number of features in the GRU hidden state.
+        num_layers (int): Number of stacked GRU layers.
+        bidirectional (bool): If True, use a bidirectional GRU.
+    """
+
+    def __init__(
+        self,
+        num_features: int,
+        hidden_size: int,
+        num_layers: int = 1,
+    ) -> None:
+        super().__init__()
+
+        self.gru = nn.GRU(
+            input_size=num_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=False  # Input shape is (T, N, n_features)
+        )
+
+        # If bidirectional, output size doubles
+        self.output_size = hidden_size
+        self.fn = nn.Linear(hidden_size, num_features)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for the GRU encoder.
+
+        Args:
+            inputs (torch.Tensor): Input tensor of shape (T, N, n_features).
+
+        Returns:
+            torch.Tensor: Output tensor of shape (T, N, output_size).
+        """
+        outputs, _ = self.gru(inputs)  # outputs: (T, N, output_size)
+        outputs = self.fn(outputs)
+        return outputs
