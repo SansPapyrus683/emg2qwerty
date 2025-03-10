@@ -3,6 +3,8 @@
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
+import os
+os.environ["TORCH_USE_WEIGHTS_ONLY_UNPICKLER"] = "0"
 
 import logging
 import os
@@ -18,6 +20,10 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from emg2qwerty import transforms, utils
 from emg2qwerty.transforms import Transform
+
+# from torch.serialization import add_safe_globals
+# from omegaconf.listconfig import ListConfig
+# add_safe_globals([ListConfig])
 
 
 log = logging.getLogger(__name__)
