@@ -1,40 +1,54 @@
-import yaml
+import os
+import sys
 import wandb
-import subprocess
 
-def load_sweep_config(config_path="sweep_config.yaml"):
-    with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+# Fixed configuration for your sweep
+SWEEP_CONFIG_PATH = "wandb_sweep_config.yaml"
+PROJECT_NAME = "emg2qwerty"
+ENTITY_NAME = "alvister88"
+NUM_RUNS = 20  # Number of runs to execute in the sweep
 
-def run_train():
-    # Initialize a new wandb run for the current sweep trial.
-    run = wandb.init()
-    config = wandb.config
-
-    # Build a list of Hydra command-line overrides from the wandb config.
-    overrides = []
-    if "seed" in config:
-        overrides.append(f"seed={config['seed']}")
-    if "optimizer.lr" in config:
-        overrides.append(f"optimizer.lr={config['optimizer.lr']}")
-
-    # Join overrides into a single string.
-    override_str = " ".join(overrides)
-
-    # Run the original training script with the overrides.
-    # The original training function is in `train.py` (its main function decorated by Hydra)
-    command = f"python train.py {override_str}"
-    subprocess.run(command, shell=True)
-
-    run.finish()
-
-def sweep_train():
-    # Load sweep configuration from YAML file.
-    sweep_configuration = load_sweep_config("sweep_config.yaml")
-    # Create a new sweep in wandb.
-    sweep_id = wandb.sweep(sweep=sweep_configuration, project="emg2qwerty-sweep")
-    # Launch the agent to run the training multiple times.
-    wandb.agent(sweep_id, function=run_train, count=10)
+def main():
+    # Ensure WandB is logged in
+    try:
+        wandb.login()
+        print("Successfully logged into WandB")
+    except Exception as e:
+        print(f"Error logging into WandB: {e}")
+        print("Please run 'wandb login' first.")
+        sys.exit(1)
+    
+    # Initialize the sweep
+    try:
+        print(f"Creating sweep from config: {SWEEP_CONFIG_PATH}")
+        with open(SWEEP_CONFIG_PATH, "r") as f:
+            sweep_config = wandb.yaml.load(f.read())
+            
+        sweep_id = wandb.sweep(
+            sweep=sweep_config,
+            project=PROJECT_NAME,
+            entity=ENTITY_NAME
+        )
+        print(f"Sweep created with ID: {sweep_id}")
+        print(f"View sweep at: https://wandb.ai/{ENTITY_NAME}/{PROJECT_NAME}/sweeps/{sweep_id}")
+    except Exception as e:
+        print(f"Error creating sweep: {e}")
+        sys.exit(1)
+    
+    # Run the sweep agent
+    print(f"Starting sweep agent to run {NUM_RUNS} experiments")
+    try:
+        wandb.agent(
+            sweep_id=sweep_id,
+            project=PROJECT_NAME,
+            entity=ENTITY_NAME,
+            count=NUM_RUNS
+        )
+    except Exception as e:
+        print(f"Error running sweep agent: {e}")
+        sys.exit(1)
+    
+    print("Sweep completed successfully!")
 
 if __name__ == "__main__":
-    sweep_train()
+    main()

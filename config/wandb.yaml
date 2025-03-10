@@ -1,0 +1,14 @@
+# Project and run information
+project: "emg2qwerty"
+entity: "alvister88"  # Your wandb username or team name
+name: ${hydra:job.name}  # Use Hydra job name for the run name
+
+# Tags and metadata
+tags: ["pytorch-lightning", "emg2qwerty"]
+notes: "Training run with CTC loss and TDSConv encoder"
+
+# WandB mode - can be "online", "offline", or "disabled"
+mode: "online"  # Set to "disabled" to disable wandb logging
+
+# Checkpoint logging
+log_model: true

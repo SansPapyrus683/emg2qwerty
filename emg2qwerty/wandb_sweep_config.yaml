@@ -1,0 +1,51 @@
+program: emg2qwerty/train.py
+method: bayes
+metric:
+  name: val/CER
+  goal: minimize
+parameters:
+  # Learning rate - log scale search space
+  optimizer.lr:
+    min: 0.00001
+    max: 0.01
+    distribution: log_uniform
+  
+  # Batch size - categorical options
+  batch_size:
+    values: [16, 32, 64, 128]
+  
+  # Number of warmup epochs
+  lr_scheduler.scheduler.warmup_epochs:
+    min: 1
+    max: 20
+    distribution: int_uniform
+  
+  # Total number of epochs
+  trainer.max_epochs:
+    values: [30, 50, 75, 100]
+  
+  # Number of input features (MLP)
+  module.mlp_features:
+    values: [[256], [384], [512], [768]]
+  
+  # Extra parameters (optional)
+  # Window length
+  datamodule.window_length:
+    values: [4000, 8000, 12000]
+  
+  # Kernel width for temporal modeling
+  module.kernel_width:
+    min: 16
+    max: 48
+    distribution: int_uniform
+  
+early_terminate:
+  type: hyperband
+  min_iter: 5
+  
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - ${args_no_hyphens}

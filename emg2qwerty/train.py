@@ -9,9 +9,10 @@ os.environ["TORCH_USE_WEIGHTS_ONLY_UNPICKLER"] = "0"
 import logging
 import os
 import pprint
+import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Optional
 
 import hydra
 import pytorch_lightning as pl
@@ -21,17 +22,26 @@ from omegaconf import DictConfig, ListConfig, OmegaConf
 from emg2qwerty import transforms, utils
 from emg2qwerty.transforms import Transform
 
-# from torch.serialization import add_safe_globals
-# from omegaconf.listconfig import ListConfig
-# add_safe_globals([ListConfig])
-
+# Setup detailed logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 log = logging.getLogger(__name__)
+
+# Simple top-level flag to enable/disable WandB
+USE_WANDB = False  # Set this to False to disable WandB logging
 
 
 @hydra.main(version_base=None, config_path="../config", config_name="base")
 def main(config: DictConfig):
     log.info(f"\nConfig:\n{OmegaConf.to_yaml(config)}")
+    
+    log.info(f"WandB logging is {'enabled' if USE_WANDB else 'disabled'}")
 
     # Add working dir to PYTHONPATH
     working_dir = get_original_cwd()
@@ -96,10 +106,56 @@ def main(config: DictConfig):
     callback_configs = config.get("callbacks", [])
     callbacks = [instantiate(cfg) for cfg in callback_configs]
 
-    # Initialize trainer
+    # Initialize loggers
+    loggers = []
+    wandb_run = None
+
+    # WandB initialization (only if flag is True)
+    if USE_WANDB:
+        try:
+            log.info("Initializing WandB...")
+            import wandb
+            
+            # Initialize wandb directly with hardcoded values
+            wandb_run = wandb.init(
+                project="emg2qwerty",
+                entity="alvister88",
+                name=f"emg2qwerty-{wandb.util.generate_id()}",  # Generate a unique name
+                config=OmegaConf.to_container(config, resolve=True),  # Log all config
+                tags=["pytorch-lightning", "emg2qwerty"]
+            )
+            log.info(f"WandB initialized with run name: {wandb_run.name}")
+            
+            # Create a PyTorch Lightning WandB logger that uses the existing run
+            wandb_logger = pl.loggers.WandbLogger(
+                experiment=wandb_run,
+                log_model=True,  # Enable model checkpointing
+            )
+            loggers.append(wandb_logger)
+            
+            # Watch model parameters and gradients
+            if hasattr(module, "model"):
+                wandb_logger.watch(module.model, log="all", log_freq=100)
+                log.info("Model parameters being tracked in WandB")
+                
+        except Exception as e:
+            log.error(f"Failed to initialize WandB: {e}", exc_info=True)
+            log.info("Will continue without WandB logging")
+    
+    # Always add a CSV logger for local logging
+    csv_logger = pl.loggers.CSVLogger(save_dir=os.path.join(os.getcwd(), "logs"))
+    loggers.append(csv_logger)
+    log.info("CSV logger initialized for local logging")
+
+    # Initialize trainer with loggers
     trainer = pl.Trainer(
         **config.trainer,
         callbacks=callbacks,
+        logger=loggers,
+        enable_progress_bar=True,
+        enable_model_summary=True,
+        log_every_n_steps=20,
+        enable_checkpointing=True,
     )
 
     if config.train:
@@ -113,9 +169,17 @@ def main(config: DictConfig):
         trainer.fit(module, datamodule, ckpt_path=resume_from_checkpoint)
 
         # Load best checkpoint
-        module = module.load_from_checkpoint(
-            trainer.checkpoint_callback.best_model_path
-        )
+        best_checkpoint_path = trainer.checkpoint_callback.best_model_path
+        if os.path.exists(best_checkpoint_path):
+            log.info(f"Loading best checkpoint: {best_checkpoint_path}")
+            module = module.load_from_checkpoint(
+                best_checkpoint_path,
+                optimizer=config.optimizer,
+                lr_scheduler=config.lr_scheduler,
+                decoder=config.decoder,
+            )
+        else:
+            log.warning(f"Best checkpoint not found: {best_checkpoint_path}")
 
     # Validate and test on the best checkpoint (if training), or on the
     # loaded `config.checkpoint` (otherwise)
@@ -125,9 +189,46 @@ def main(config: DictConfig):
     results = {
         "val_metrics": val_metrics,
         "test_metrics": test_metrics,
-        "best_checkpoint": trainer.checkpoint_callback.best_model_path,
+        "best_checkpoint": trainer.checkpoint_callback.best_model_path if hasattr(trainer, "checkpoint_callback") else None,
     }
     pprint.pprint(results, sort_dicts=False)
+    
+    # Log final results to WandB if enabled
+    if USE_WANDB and wandb_run:
+        try:
+            import wandb
+            # Log best checkpoint as artifact
+            best_checkpoint_path = trainer.checkpoint_callback.best_model_path
+            if best_checkpoint_path and os.path.exists(best_checkpoint_path):
+                log.info(f"Logging best checkpoint {best_checkpoint_path} to WandB")
+                
+                # Create and log artifact
+                model_artifact = wandb.Artifact(
+                    name=f"model-{wandb.run.id}", 
+                    type="model",
+                    metadata={
+                        "val_metrics": val_metrics,
+                        "test_metrics": test_metrics
+                    }
+                )
+                model_artifact.add_file(best_checkpoint_path)
+                wandb.log_artifact(model_artifact)
+                
+                # Also log a summary of the final metrics
+                wandb.run.summary.update({
+                    "final/val_loss": val_metrics[0].get("val/loss", None),
+                    "final/val_CER": val_metrics[0].get("val/CER", None),
+                    "final/val_WER": val_metrics[0].get("val/WER", None),
+                    "final/test_loss": test_metrics[0].get("test/loss", None),
+                    "final/test_CER": test_metrics[0].get("test/CER", None),
+                    "final/test_WER": test_metrics[0].get("test/WER", None)
+                })
+            
+            # Finish the run
+            log.info("Finalizing WandB run")
+            wandb.finish()
+        except Exception as e:
+            log.error(f"Error logging to WandB: {e}", exc_info=True)
 
 
 if __name__ == "__main__":
