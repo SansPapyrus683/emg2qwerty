@@ -317,7 +317,7 @@ class TDSGRUEncoder(nn.Module):
         self,
         num_features: int,
         hidden_size: int,
-        num_layers: int = 1,
+        num_layers: int,
     ) -> None:
         super().__init__()
 
@@ -343,5 +343,30 @@ class TDSGRUEncoder(nn.Module):
             torch.Tensor: Output tensor of shape (T, N, output_size).
         """
         outputs, _ = self.gru(inputs)  # outputs: (T, N, output_size)
+        outputs = self.fn(outputs)
+        return outputs
+
+
+class TDSRNNEncoder(nn.Module):
+
+    def __init__(
+        self,
+        num_features: int,
+        hidden_size: int,
+        num_layers: int,
+    ) -> None:
+        super().__init__()
+
+        self.rnn = nn.RNN(
+            input_size=num_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=False  
+        )
+
+        self.fn = nn.Linear(hidden_size, num_features)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        outputs, _ = self.rnn(inputs)
         outputs = self.fn(outputs)
         return outputs
