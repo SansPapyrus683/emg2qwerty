@@ -22,7 +22,7 @@ parameters:
   
   # Total number of epochs
   trainer.max_epochs:
-    values: [30, 50, 75, 100]
+    values: [50, 75, 100, 150]
   
   # Number of input features (MLP)
   module.mlp_features:
