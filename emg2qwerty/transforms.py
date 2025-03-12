@@ -243,3 +243,14 @@ class SpecAugment:
 
         # (..., C, freq, T) -> (T, ..., C, freq)
         return x.movedim(-1, 0)
+
+
+@dataclass
+class GaussianNoise:
+
+    noise_std: float = 0.1
+
+    def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
+        noise = torch.randn_like(tensor) * noise_std
+        return tensor * (1 + noise)
+
