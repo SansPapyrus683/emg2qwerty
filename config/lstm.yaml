@@ -74,13 +74,13 @@ lr_scheduler:
     warmup_start_lr: 1e-8
     eta_min: 1e-6
   interval: epoch
-
+  
 defaults:
   - user: single_user
-  - transforms: log_spectrogram
-  - model: tds_conv_ctc
-  - optimizer: adam
-  - lr_scheduler: linear_warmup_cosine_annealing
+  # - transforms: log_spectrogram
+  # - model: tds_conv_ctc
+  # - optimizer: adam
+  # - lr_scheduler: linear_warmup_cosine_annealing
   - decoder: ctc_greedy
   - cluster: local
   - _self_
