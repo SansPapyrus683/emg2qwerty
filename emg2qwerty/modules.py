@@ -240,6 +240,29 @@ class TDSFullyConnectedBlock(nn.Module):
         return self.layer_norm(x)  # TNC
 
 
+class TDSLSTMEncoder(nn.Module):
+    
+    def __init__(
+        self,
+        num_features: int,
+        hidden_size: int,
+        num_layers: int
+    ) -> None:
+        super().__init__()
+
+        self.lstm = nn.LSTM(
+            input_size=num_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=False  # Input format is (seq_len, batch, features)
+        )
+        self.fn = nn.Linear(hidden_size, num_features)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        output, _ = self.lstm(inputs)
+        output = self.fn(output)
+        return output
+
 class TDSConvEncoder(nn.Module):
     """A time depth-separable convolutional encoder composing a sequence
     of `TDSConv2dBlock` and `TDSFullyConnectedBlock` as per
@@ -294,7 +317,7 @@ class TDSGRUEncoder(nn.Module):
         self,
         num_features: int,
         hidden_size: int,
-        num_layers: int = 1,
+        num_layers: int,
     ) -> None:
         super().__init__()
 
@@ -320,5 +343,30 @@ class TDSGRUEncoder(nn.Module):
             torch.Tensor: Output tensor of shape (T, N, output_size).
         """
         outputs, _ = self.gru(inputs)  # outputs: (T, N, output_size)
+        outputs = self.fn(outputs)
+        return outputs
+
+
+class TDSRNNEncoder(nn.Module):
+
+    def __init__(
+        self,
+        num_features: int,
+        hidden_size: int,
+        num_layers: int,
+    ) -> None:
+        super().__init__()
+
+        self.rnn = nn.RNN(
+            input_size=num_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=False  
+        )
+
+        self.fn = nn.Linear(hidden_size, num_features)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        outputs, _ = self.rnn(inputs)
         outputs = self.fn(outputs)
         return outputs

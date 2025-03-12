@@ -49,11 +49,11 @@ transforms:
 
 # MODEL ARCHITECTURE (tds_conv_ctc.yaml)
 module:
-  _target_: emg2qwerty.lightning.TDSConvCTCModule
+  _target_: emg2qwerty.lightning.TDSRNNCTCModule
   in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16
   mlp_features: [384]
-  block_channels: [24, 24, 24, 24]
-  kernel_width: 32  # Total temporal receptive field of 125 samples given 4 layers
+  hidden_size: 128
+  num_layers: 32
 
 datamodule:
   _target_: emg2qwerty.lightning.WindowedEMGDataModule
@@ -77,12 +77,11 @@ lr_scheduler:
 
 defaults:
   - user: single_user
-  - transforms: log_spectrogram
-  - model: tds_conv_ctc
-  - optimizer: adam
-  - lr_scheduler: linear_warmup_cosine_annealing
+  # - transforms: log_spectrogram
+  # - model: tds_conv_ctc
+  # - optimizer: adam
+  # - lr_scheduler: linear_warmup_cosine_annealing
   - decoder: ctc_greedy
-  # - wandb: default
   - cluster: local
   - _self_
 
@@ -98,7 +97,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 30 #150
+  max_epochs: 150
   default_root_dir: ${hydra:runtime.output_dir}
 
 callbacks:
@@ -128,4 +127,3 @@ hydra:
           - checkpoint
           - cluster
           - trainer.accelerator
-
