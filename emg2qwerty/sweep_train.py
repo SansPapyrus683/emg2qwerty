@@ -1,9 +1,10 @@
 import os
 import sys
 import wandb
+import yaml  # Import PyYAML
 
 # Fixed configuration for your sweep
-SWEEP_CONFIG_PATH = "wandb_sweep_config.yaml"
+SWEEP_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "wandb_sweep_gru.yaml")
 PROJECT_NAME = "emg2qwerty"
 ENTITY_NAME = "alvister88"
 NUM_RUNS = 20  # Number of runs to execute in the sweep
@@ -22,7 +23,7 @@ def main():
     try:
         print(f"Creating sweep from config: {SWEEP_CONFIG_PATH}")
         with open(SWEEP_CONFIG_PATH, "r") as f:
-            sweep_config = wandb.yaml.load(f.read())
+            sweep_config = yaml.safe_load(f)  # Use PyYAML's safe_load
             
         sweep_id = wandb.sweep(
             sweep=sweep_config,

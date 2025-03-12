@@ -34,7 +34,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # Simple top-level flag to enable/disable WandB
-USE_WANDB = False  # Set this to False to disable WandB logging
+USE_WANDB = True  # Set this to False to disable WandB logging
 
 
 @hydra.main(version_base=None, config_path="../config", config_name="base")

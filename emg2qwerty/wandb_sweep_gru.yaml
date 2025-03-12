@@ -1,0 +1,60 @@
+program: emg2qwerty.train
+method: bayes
+metric:
+  name: val/CER
+  goal: minimize
+parameters:
+  # Learning rate - log scale search space
+  optimizer.lr:
+    min: 0.00001
+    max: 0.01
+    distribution: log_uniform
+  
+  # Batch size - categorical options
+  batch_size:
+    values: [16, 32, 64, 128]
+  
+  # Number of warmup epochs
+  lr_scheduler.scheduler.warmup_epochs:
+    min: 1
+    max: 20
+    distribution: int_uniform
+  
+  # Total number of epochs
+  trainer.max_epochs:
+    values: [50, 75, 100, 150]
+  
+  # MLP features for the multi-band rotation invariant MLP
+  module.mlp_features:
+    values: [[384]]  # or any other desired configuration
+  
+  # Data module window length remains unchanged
+  datamodule.window_length:
+    values: [4000, 8000, 12000]
+  
+  # GRU encoder specific parameters:
+  +module.hidden_size:
+    min: 64
+    max: 512
+    distribution: int_uniform
+
+  +module.num_layers:
+    min: 3
+    max: 8
+    distribution: int_uniform
+
+
+# Override the model target to use the GRU module
+module._target_: emg2qwerty.lightning.TDSGRUCTCModule
+
+early_terminate:
+  type: hyperband
+  min_iter: 5
+  
+command:
+  - C:/Users/User/env/emg2qwerty/Scripts/python.exe
+  - -m
+  - emg2qwerty.train
+  - module._target_=emg2qwerty.lightning.TDSGRUCTCModule
+  - ${args_no_hyphens}
+
