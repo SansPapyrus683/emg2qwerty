@@ -325,10 +325,9 @@ class TDSGRUEncoder(nn.Module):
             input_size=num_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            batch_first=False  # Input shape is (T, N, n_features)
+            batch_first=False  # Input shape is (T, N, num_features)
         )
 
-        # If bidirectional, output size doubles
         self.output_size = hidden_size
         self.fn = nn.Linear(hidden_size, num_features)
 
@@ -369,4 +368,71 @@ class TDSRNNEncoder(nn.Module):
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         outputs, _ = self.rnn(inputs)
         outputs = self.fn(outputs)
+        return outputs
+
+class TDSCNNGRUEncoder(nn.Module):
+    """
+    A combined CNN and GRU encoder that processes input sequences of shape (T, N, n_features).
+
+    Args:
+        input_size (int): The number of input features per time step (n_features).
+        cnn_channels (int): Number of output channels for the CNN layer.
+        kernel_size (int): Size of the convolutional kernel.
+        hidden_size (int): The number of features in the GRU hidden state.
+        num_layers (int): Number of stacked GRU layers.
+    """
+
+    def __init__(
+        self,
+        num_features: int,
+        hidden_size: int,
+        num_layers: int,
+        block_channels: Sequence[int] = (24, 24, 24, 24),
+        kernel_width: int = 32,
+    ) -> None:
+        super().__init__()
+
+        assert len(block_channels) > 0
+
+        # CNN block sequence from TDSConvEncoder
+        tds_blocks: list[nn.Module] = []
+        for channels in block_channels:
+            assert (
+                num_features % channels == 0
+            ), "block_channels must evenly divide input_size"
+            tds_blocks.extend(
+                [
+                    TDSConv2dBlock(channels, num_features // channels, kernel_width),
+                    TDSFullyConnectedBlock(num_features),
+                ]
+            )
+        self.tds_blocks = nn.Sequential(*tds_blocks)
+
+        # GRU layer
+        self.gru = nn.GRU(
+            input_size=num_features,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=False
+        )
+
+        self.output_size = hidden_size
+        self.fn = nn.Linear(hidden_size, num_features)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for the CNN+GRU encoder.
+
+        Args:
+            inputs (torch.Tensor): Input tensor of shape (T, N, num_features).
+
+        Returns:
+            torch.Tensor: Output tensor of shape (T, N, output_size).
+        """
+        # Permute inputs to (N, input_size, T) for Conv1d
+        tds_cnn_features = self.tds_blocks(inputs)  # (T, N, num_features)
+
+        # Pass through GRU
+        outputs, _ = self.gru(tds_cnn_features)  # (T, N, output_size)
+        outputs = self.fn(outputs) # (T, N, num_features)
         return outputs

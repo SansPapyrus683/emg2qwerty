@@ -1,0 +1,126 @@
+# TRANSFORMS (log_spectrogram.yaml)
+to_tensor:
+  _target_: emg2qwerty.transforms.ToTensor
+  fields: [emg_left, emg_right]
+
+band_rotation:
+  _target_: emg2qwerty.transforms.ForEach  # i.i.d rotation offset for each band
+  transform:
+    _target_: emg2qwerty.transforms.RandomBandRotation
+    offsets: [-1, 0, 1]
+
+temporal_jitter:
+  _target_: emg2qwerty.transforms.TemporalAlignmentJitter
+  max_offset: 120  # Max 60ms jitter for 2kHz EMG
+
+logspec:
+  _target_: emg2qwerty.transforms.LogSpectrogram
+  n_fft: 64
+  hop_length: 16  # Downsamples from 2kHz to 125Hz
+
+specaug:
+  _target_: emg2qwerty.transforms.SpecAugment
+  n_time_masks: 3
+  time_mask_param: 25  # Max 200ms per time mask for 125Hz spectrogram
+  n_freq_masks: 2
+  freq_mask_param: 4
+
+gaussian_noise:
+  _target_: emg2qwerty.transforms.GaussianNoise
+  noise_std: 0.1
+
+transforms:
+  train:
+    - ${to_tensor}
+    - ${band_rotation}
+    - ${temporal_jitter}
+    - ${logspec}
+    - ${specaug}
+
+  val:
+    - ${to_tensor}
+    - ${logspec}
+
+  test: ${transforms.val}
+
+
+# MODEL ARCHITECTURE (tds_conv_ctc.yaml)
+module:
+  _target_: emg2qwerty.lightning.TDSCNNGRUCTCModule
+  in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16
+  mlp_features: [384]
+  hidden_size: 256
+  num_layers: 64
+
+datamodule:
+  _target_: emg2qwerty.lightning.WindowedEMGDataModule
+  window_length: 8000  # 4 sec windows for 2kHz EMG
+  padding: [1800, 200]  # 900ms past context, 100ms future context
+
+# OPTIMIZER (adam.yaml)
+optimizer:
+  _target_: torch.optim.Adam
+  lr: 1e-3
+
+# LR SCHEDULING (linear_warmup_cosine_annealing.yaml)
+lr_scheduler:
+  scheduler:
+    _target_: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
+    warmup_epochs: 10
+    max_epochs: ${trainer.max_epochs}
+    warmup_start_lr: 1e-8
+    eta_min: 1e-6
+  interval: epoch
+
+defaults:
+  - user: single_user
+  # - transforms: log_spectrogram
+  # - model: tds_conv_ctc
+  # - optimizer: adam
+  # - lr_scheduler: linear_warmup_cosine_annealing
+  - decoder: ctc_greedy
+  - cluster: local
+  - _self_
+
+seed: 1501
+batch_size: 32
+num_workers: 4  # Number of workers for dataloading
+train: True  # Whether to train or only run validation and test
+checkpoint: null  # Optional path to checkpoint file
+monitor_metric: val/CER
+monitor_mode: min
+
+trainer:
+  accelerator: gpu
+  devices: 1
+  num_nodes: 1
+  max_epochs: 50
+  default_root_dir: ${hydra:runtime.output_dir}
+
+callbacks:
+  - _target_: pytorch_lightning.callbacks.LearningRateMonitor
+  - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    dirpath: ${hydra:runtime.output_dir}/checkpoints
+    monitor: ${monitor_metric}
+    mode: ${monitor_mode}
+    save_last: True
+    verbose: True
+
+dataset:
+  root: ${hydra:runtime.cwd}/data
+
+hydra:
+  run:
+    dir: logs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ${hydra.run.dir}
+    subdir: job${hydra.job.num}_${hydra.job.override_dirname}
+  output_subdir: hydra_configs
+  job:
+    name: emg2qwerty
+    config:
+      override_dirname:
+        exclude_keys:
+          - checkpoint
+          - cluster
+          - trainer.accelerator
