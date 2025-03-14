@@ -406,3 +406,44 @@ class TDSSSMEncoder(nn.Module):
             outputs.append(y_t)
         
         return torch.stack(outputs)
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-torch.log(torch.tensor(10000.0)) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        # x: (T, N, d_model)
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
+
+
+class TDSTransformerEncoder(nn.Module):
+    def __init__(self, num_features, nhead, num_layers, dim_feedforward=2048, dropout=0.1):
+        super().__init__()
+        self.pos_encoder = PositionalEncoding(num_features, dropout)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=num_features,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers,
+            enable_nested_tensor=True
+        )
+    
+    def forward(self, src):
+        src = src.permute(1, 0, 2)
+        src = self.pos_encoder(src)
+        output = self.transformer_encoder(src)
+        output = output.permute(1, 0, 2)
+        return output
