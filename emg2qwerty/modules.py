@@ -376,3 +376,39 @@ class TDSRNNEncoder(nn.Module):
         outputs, _ = self.rnn(inputs)
         outputs = self.fn(outputs)
         return outputs
+
+
+class TDSSSMEncoder(nn.Module):
+    def __init__(self, num_features, hidden_size):
+        super().__init__()
+        self.num_features = num_features
+        self.hidden_size = hidden_size
+
+        # State transition parameters
+        self.A = nn.Parameter(torch.randn(hidden_size, hidden_size))  # Transition matrix
+        self.B = nn.Parameter(torch.randn(num_features, hidden_size))  # Input projection
+        
+        # Observation parameters
+        self.C = nn.Parameter(torch.randn(hidden_size, num_features))  # Output projection
+        self.D = nn.Parameter(torch.randn(num_features, num_features))  # Skip connection
+
+    def forward(self, x):
+        # x shape: (T, batch_size, num_features)
+        T, batch_size, _ = x.shape
+        device = x.device
+        
+        # Initialize hidden state
+        h = torch.zeros(batch_size, self.hidden_size, device=device)
+        
+        outputs = []
+        for t in range(T):
+            x_t = x[t]  # (batch_size, num_features)
+            
+            # State transition
+            h = torch.matmul(h, self.A) + torch.matmul(x_t, self.B)
+
+            # Compute output
+            y_t = torch.matmul(h, self.C) + torch.matmul(x_t, self.D)
+            outputs.append(y_t)
+        
+        return torch.stack(outputs)
