@@ -379,36 +379,67 @@ class TDSRNNEncoder(nn.Module):
 
 
 class TDSSSMEncoder(nn.Module):
-    def __init__(self, num_features, hidden_size):
-        super().__init__()
-        self.num_features = num_features
-        self.hidden_size = hidden_size
+    def __init__(self, num_features, hidden_size=None):
+        super(SSM, self).__init__()
+        self.d_state = hidden_size if hidden_size is not None else num_features  # Default state size
+        # Learnable parameters for state transitions and outputs
+        self.A = nn.Parameter(torch.randn(self.d_state, self.d_state))  # State transition matrix
+        self.B = nn.Parameter(torch.randn(self.d_state, num_features))  # Input-to-state matrix
+        self.C = nn.Parameter(torch.randn(num_features, self.d_state))  # State-to-output matrix
+        self.D = nn.Parameter(torch.randn(num_features, num_features))  # Input-to-output matrix
 
-        # State transition parameters
-        self.A = nn.Parameter(torch.randn(hidden_size, hidden_size))  # Transition matrix
-        self.B = nn.Parameter(torch.randn(num_features, hidden_size))  # Input projection
-        
-        # Observation parameters
-        self.C = nn.Parameter(torch.randn(hidden_size, num_features))  # Output projection
-        self.D = nn.Parameter(torch.randn(num_features, num_features))  # Skip connection
+    def forward(self, u):
+        # u: Input tensor of shape (T, N, num_features)
+        T, N, _ = u.shape
+        outputs = []
+        # Initialize hidden state for each sequence
+        x = torch.zeros(N, self.d_state, device=u.device)
+        for t in range(T):
+            u_t = u[t]  # Current time step input (N, num_features)
+            # Update state: x_{t+1} = A @ x_t + B @ u_t
+            x = torch.einsum('ij,bj->bi', self.A, x) + torch.einsum('ij,bj->bi', self.B, u_t)
+            # Compute output: y_t = C @ x_t + D @ u_t
+            y_t = torch.einsum('ij,bj->bi', self.C, x) + torch.einsum('ij,bj->bi', self.D, u_t)
+            outputs.append(y_t)
+        return torch.stack(outputs, dim=0)
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-torch.log(torch.tensor(10000.0)) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
 
     def forward(self, x):
-        # x shape: (T, batch_size, num_features)
-        T, batch_size, _ = x.shape
-        device = x.device
-        
-        # Initialize hidden state
-        h = torch.zeros(batch_size, self.hidden_size, device=device)
-        
-        outputs = []
-        for t in range(T):
-            x_t = x[t]  # (batch_size, num_features)
-            
-            # State transition
-            h = torch.matmul(h, self.A) + torch.matmul(x_t, self.B)
+        # x: (T, N, d_model)
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
 
-            # Compute output
-            y_t = torch.matmul(h, self.C) + torch.matmul(x_t, self.D)
-            outputs.append(y_t)
-        
-        return torch.stack(outputs)
+
+class TDSTransformerEncoder(nn.Module):
+    def __init__(self, num_features, nhead, num_layers, dim_feedforward=2048, dropout=0.1):
+        super().__init__()
+        self.pos_encoder = PositionalEncoding(num_features, dropout)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=num_features,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers,
+            enable_nested_tensor=True
+        )
+    
+    def forward(self, src):
+        src = src.permute(1, 0, 2)
+        src = self.pos_encoder(src)
+        output = self.transformer_encoder(src)
+        output = output.permute(1, 0, 2)
+        return output
