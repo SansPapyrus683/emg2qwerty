@@ -30,7 +30,7 @@ specaug:
 
 gaussian_noise:
   _target_: emg2qwerty.transforms.GaussianNoise
-  noise_std: 0.1
+  noise_std: 0.0 # 0.1
 
 transforms:
   train:
@@ -98,7 +98,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 30 #150
+  max_epochs: 125 #150
   default_root_dir: ${hydra:runtime.output_dir}
 
 callbacks:

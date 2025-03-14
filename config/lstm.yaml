@@ -30,7 +30,7 @@ specaug:
 
 gaussian_noise:
   _target_: emg2qwerty.transforms.GaussianNoise
-  noise_std: 0.1
+  noise_std: 0.0
 
 transforms:
   train:
@@ -52,8 +52,8 @@ module:
   _target_: emg2qwerty.lightning.TDSLSTMCTCModule
   in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16
   mlp_features: [384]
-  hidden_size: 128
-  num_layers: 32
+  hidden_size: 300
+  num_layers: 4
 
 datamodule:
   _target_: emg2qwerty.lightning.WindowedEMGDataModule
@@ -63,7 +63,7 @@ datamodule:
 # OPTIMIZER (adam.yaml)
 optimizer:
   _target_: torch.optim.Adam
-  lr: 1e-3
+  lr: 7e-4 # 1e-3
 
 # LR SCHEDULING (linear_warmup_cosine_annealing.yaml)
 lr_scheduler:
@@ -71,10 +71,10 @@ lr_scheduler:
     _target_: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
     warmup_epochs: 10
     max_epochs: ${trainer.max_epochs}
-    warmup_start_lr: 1e-8
-    eta_min: 1e-6
+    warmup_start_lr: 5e-06
+    eta_min: 1e-5
   interval: epoch
-  
+
 defaults:
   - user: single_user
   # - transforms: log_spectrogram
@@ -86,7 +86,7 @@ defaults:
   - _self_
 
 seed: 1501
-batch_size: 32
+batch_size: 32 # 32
 num_workers: 4  # Number of workers for dataloading
 train: True  # Whether to train or only run validation and test
 checkpoint: null  # Optional path to checkpoint file

@@ -6,39 +6,27 @@ metric:
 
 parameters:
   optimizer.lr:
-    min: 0.0001
-    max: 0.01
-    distribution: log_uniform_values
+    values: [0.001]
   batch_size:
     values: [32]
   lr_scheduler.scheduler.warmup_epochs:
-    min: 1
-    max: 20
-    distribution: int_uniform
+    values: [10]
   trainer.max_epochs:
-    values: [75, 100, 125]
+    values: [125]
   module.mlp_features:
     values: [[384]]
   module.in_features:
     values: [528]
   datamodule.window_length:
-    values: [4000, 8000, 12000]
+    values: [8000]
   module.hidden_size:
-    min: 100
-    max: 300
-    distribution: int_uniform
+    values: [256]
   module.num_layers:
-    min: 3
-    max: 6
-    distribution: int_uniform
+    values: [4]
   lr_scheduler.scheduler.warmup_start_lr:
-    min: 1e-7
-    max: 1e-5
-    distribution: log_uniform_values
+    values: [0.000005]
   lr_scheduler.scheduler.eta_min:
-    min: 1e-6
-    max: 1e-4
-    distribution: log_uniform_values
+    values: [0.00005]
 
 early_terminate:
   type: hyperband

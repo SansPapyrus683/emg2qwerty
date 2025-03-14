@@ -7,7 +7,7 @@ metric:
 parameters:
   optimizer.lr:
     min: 0.0001
-    max: 0.01
+    max: 0.005
     distribution: log_uniform_values
   batch_size:
     values: [32]
@@ -24,11 +24,11 @@ parameters:
   datamodule.window_length:
     values: [4000, 8000, 12000]
   module.hidden_size:
-    min: 100
+    min: 150
     max: 300
     distribution: int_uniform
   module.num_layers:
-    min: 3
+    min: 2
     max: 6
     distribution: int_uniform
   lr_scheduler.scheduler.warmup_start_lr:

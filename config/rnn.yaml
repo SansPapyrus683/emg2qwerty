@@ -30,7 +30,7 @@ specaug:
 
 gaussian_noise:
   _target_: emg2qwerty.transforms.GaussianNoise
-  noise_std: 0.1
+  noise_std: 0.0
 
 transforms:
   train:
@@ -52,8 +52,8 @@ module:
   _target_: emg2qwerty.lightning.TDSRNNCTCModule
   in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16
   mlp_features: [384]
-  hidden_size: 128
-  num_layers: 32
+  hidden_size: 256
+  num_layers: 4
 
 datamodule:
   _target_: emg2qwerty.lightning.WindowedEMGDataModule
@@ -63,7 +63,7 @@ datamodule:
 # OPTIMIZER (adam.yaml)
 optimizer:
   _target_: torch.optim.Adam
-  lr: 1e-3
+  lr: 5e-3
 
 # LR SCHEDULING (linear_warmup_cosine_annealing.yaml)
 lr_scheduler:
@@ -71,8 +71,8 @@ lr_scheduler:
     _target_: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
     warmup_epochs: 10
     max_epochs: ${trainer.max_epochs}
-    warmup_start_lr: 1e-8
-    eta_min: 1e-6
+    warmup_start_lr: 5e-6
+    eta_min: 1e-4
   interval: epoch
 
 defaults:
@@ -97,7 +97,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 150
+  max_epochs: 50
   default_root_dir: ${hydra:runtime.output_dir}
 
 callbacks:

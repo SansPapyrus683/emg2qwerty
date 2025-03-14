@@ -246,7 +246,8 @@ class TDSLSTMEncoder(nn.Module):
         self,
         num_features: int,
         hidden_size: int,
-        num_layers: int
+        num_layers: int,
+        dropout: float=0.1,
     ) -> None:
         super().__init__()
 
@@ -254,7 +255,8 @@ class TDSLSTMEncoder(nn.Module):
             input_size=num_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            batch_first=False  # Input format is (seq_len, batch, features)
+            batch_first=False,  # Input format is (seq_len, batch, features)
+            dropout=dropout
         )
         self.fn = nn.Linear(hidden_size, num_features)
 
@@ -318,6 +320,7 @@ class TDSGRUEncoder(nn.Module):
         num_features: int,
         hidden_size: int,
         num_layers: int,
+        dropout: float=0.1,
     ) -> None:
         super().__init__()
 
@@ -325,6 +328,7 @@ class TDSGRUEncoder(nn.Module):
             input_size=num_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
+            dropout=dropout,
             batch_first=False  # Input shape is (T, N, n_features)
         )
 
@@ -354,6 +358,7 @@ class TDSRNNEncoder(nn.Module):
         num_features: int,
         hidden_size: int,
         num_layers: int,
+        dropout: float=0.1,
     ) -> None:
         super().__init__()
 
@@ -361,6 +366,7 @@ class TDSRNNEncoder(nn.Module):
             input_size=num_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
+            dropout=dropout,
             batch_first=False  
         )
 
