@@ -373,39 +373,29 @@ class TDSRNNEncoder(nn.Module):
 
 
 class TDSSSMEncoder(nn.Module):
-    def __init__(self, num_features, hidden_size):
-        super().__init__()
-        self.num_features = num_features
-        self.hidden_size = hidden_size
+    def __init__(self, num_features, hidden_size=None):
+        super(SSM, self).__init__()
+        self.d_state = hidden_size if hidden_size is not None else num_features  # Default state size
+        # Learnable parameters for state transitions and outputs
+        self.A = nn.Parameter(torch.randn(self.d_state, self.d_state))  # State transition matrix
+        self.B = nn.Parameter(torch.randn(self.d_state, num_features))  # Input-to-state matrix
+        self.C = nn.Parameter(torch.randn(num_features, self.d_state))  # State-to-output matrix
+        self.D = nn.Parameter(torch.randn(num_features, num_features))  # Input-to-output matrix
 
-        # State transition parameters
-        self.A = nn.Parameter(torch.randn(hidden_size, hidden_size))  # Transition matrix
-        self.B = nn.Parameter(torch.randn(num_features, hidden_size))  # Input projection
-        
-        # Observation parameters
-        self.C = nn.Parameter(torch.randn(hidden_size, num_features))  # Output projection
-        self.D = nn.Parameter(torch.randn(num_features, num_features))  # Skip connection
-
-    def forward(self, x):
-        # x shape: (T, batch_size, num_features)
-        T, batch_size, _ = x.shape
-        device = x.device
-        
-        # Initialize hidden state
-        h = torch.zeros(batch_size, self.hidden_size, device=device)
-        
+    def forward(self, u):
+        # u: Input tensor of shape (T, N, num_features)
+        T, N, _ = u.shape
         outputs = []
+        # Initialize hidden state for each sequence
+        x = torch.zeros(N, self.d_state, device=u.device)
         for t in range(T):
-            x_t = x[t]  # (batch_size, num_features)
-            
-            # State transition
-            h = torch.matmul(h, self.A) + torch.matmul(x_t, self.B)
-
-            # Compute output
-            y_t = torch.matmul(h, self.C) + torch.matmul(x_t, self.D)
+            u_t = u[t]  # Current time step input (N, num_features)
+            # Update state: x_{t+1} = A @ x_t + B @ u_t
+            x = torch.einsum('ij,bj->bi', self.A, x) + torch.einsum('ij,bj->bi', self.B, u_t)
+            # Compute output: y_t = C @ x_t + D @ u_t
+            y_t = torch.einsum('ij,bj->bi', self.C, x) + torch.einsum('ij,bj->bi', self.D, u_t)
             outputs.append(y_t)
-        
-        return torch.stack(outputs)
+        return torch.stack(outputs, dim=0)
 
 
 class PositionalEncoding(nn.Module):
