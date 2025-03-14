@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 USE_WANDB = True  # Set this to False to disable WandB logging
 
 
-@hydra.main(version_base=None, config_path="../config", config_name="rnn")
+@hydra.main(version_base=None, config_path="../config", config_name="cnn_lstm")
 def main(config: DictConfig):
     log.info(f"\nConfig:\n{OmegaConf.to_yaml(config)}")
     
@@ -120,7 +120,7 @@ def main(config: DictConfig):
             wandb_run = wandb.init(
                 project="emg2qwerty",
                 entity="alvister88",
-                name=f"emg2qwerty-rnn-{wandb.util.generate_id()}",  # Generate a unique name
+                name=f"emg2qwerty-cnn_lstm-{wandb.util.generate_id()}",  # Generate a unique name
                 config=OmegaConf.to_container(config, resolve=True),  # Log all config
                 tags=["pytorch-lightning", "emg2qwerty"],
                 # sweep_id="0i4pz9vg",

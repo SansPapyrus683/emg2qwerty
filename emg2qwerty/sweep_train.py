@@ -6,13 +6,13 @@ import yaml  # Import PyYAML
 # Configuration variables
 PROJECT_NAME = "emg2qwerty"
 ENTITY_NAME = "alvister88"
-SWEEP_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "wandb_sweep_rnn.yaml")
+SWEEP_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "wandb_sweep_cnn+lstm.yaml")
 
 # Set SWEEP_ID here. If you want to use an existing sweep, set it to that ID (e.g., "0i4pz9vg").
 # If set to None, a new sweep will be created.
 SWEEP_ID = None
 
-NUM_RUNS = 12  # Number of runs to execute in the sweep
+NUM_RUNS = 10  # Number of runs to execute in the sweep
 
 def main():
     # Ensure WandB is logged in.

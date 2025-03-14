@@ -247,7 +247,7 @@ class TDSLSTMEncoder(nn.Module):
         num_features: int,
         hidden_size: int,
         num_layers: int,
-        dropout: float=0.1,
+        dropout: float=0.3,
     ) -> None:
         super().__init__()
 
