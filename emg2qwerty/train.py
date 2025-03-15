@@ -151,6 +151,7 @@ def main(config: DictConfig):
     # Initialize trainer with loggers
     trainer = pl.Trainer(
         **config.trainer,
+        gradient_clip_val=1.0,
         callbacks=callbacks,
         logger=loggers,
         enable_progress_bar=True,

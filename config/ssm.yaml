@@ -53,7 +53,7 @@ module:
   _target_: emg2qwerty.lightning.TDSSSMCTCModule
   in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16
   mlp_features: [384]
-  hidden_size: 256
+  hidden_size: 1024
 
 datamodule:
   _target_: emg2qwerty.lightning.WindowedEMGDataModule
@@ -63,7 +63,7 @@ datamodule:
 # OPTIMIZER (adam.yaml)
 optimizer:
   _target_: torch.optim.Adam
-  lr: 1e-3
+  lr: 7e-4
 
 # LR SCHEDULING (linear_warmup_cosine_annealing.yaml)
 lr_scheduler:
@@ -72,13 +72,13 @@ lr_scheduler:
     warmup_epochs: 10
     max_epochs: ${trainer.max_epochs}
     warmup_start_lr: 1e-8
-    eta_min: 1e-6
+    eta_min: 2e-7
   interval: epoch
 
 defaults:
   - user: single_user
   # - transforms: log_spectrogram
-  # - model: tds_conv_ctc
+  # - model: tds_conv_ctcz
   # - optimizer: adam
   # - lr_scheduler: linear_warmup_cosine_annealing
   - decoder: ctc_greedy
@@ -87,7 +87,7 @@ defaults:
 
 seed: 1501
 batch_size: 32
-num_workers: 4  # Number of workers for dataloading
+num_workers: 12  # Number of workers for dataloading
 train: True  # Whether to train or only run validation and test
 checkpoint: null  # Optional path to checkpoint file
 monitor_metric: val/CER
@@ -97,7 +97,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 50
+  max_epochs: 125
   default_root_dir: ${hydra:runtime.output_dir}
 
 callbacks:

@@ -379,29 +379,39 @@ class TDSRNNEncoder(nn.Module):
 
 
 class TDSSSMEncoder(nn.Module):
-    def __init__(self, num_features, hidden_size=None):
-        super(SSM, self).__init__()
-        self.d_state = hidden_size if hidden_size is not None else num_features  # Default state size
-        # Learnable parameters for state transitions and outputs
-        self.A = nn.Parameter(torch.randn(self.d_state, self.d_state))  # State transition matrix
-        self.B = nn.Parameter(torch.randn(self.d_state, num_features))  # Input-to-state matrix
-        self.C = nn.Parameter(torch.randn(num_features, self.d_state))  # State-to-output matrix
-        self.D = nn.Parameter(torch.randn(num_features, num_features))  # Input-to-output matrix
+    def __init__(self, num_features: int, hidden_size: int | None = None) -> None:
+        super().__init__()
+        # Use provided hidden_size or default to num_features
+        self.d_state = hidden_size if hidden_size is not None else num_features
+        scale = 0.02
+        self.A = nn.Parameter(torch.randn(self.d_state, self.d_state) * scale)
+        self.B = nn.Parameter(torch.randn(self.d_state, num_features) * scale)
+        self.C = nn.Parameter(torch.randn(num_features, self.d_state) * scale)
+        self.D = nn.Parameter(torch.randn(num_features, num_features) * scale)
 
-    def forward(self, u):
-        # u: Input tensor of shape (T, N, num_features)
-        T, N, _ = u.shape
-        outputs = []
-        # Initialize hidden state for each sequence
-        x = torch.zeros(N, self.d_state, device=u.device)
-        for t in range(T):
-            u_t = u[t]  # Current time step input (N, num_features)
-            # Update state: x_{t+1} = A @ x_t + B @ u_t
-            x = torch.einsum('ij,bj->bi', self.A, x) + torch.einsum('ij,bj->bi', self.B, u_t)
-            # Compute output: y_t = C @ x_t + D @ u_t
-            y_t = torch.einsum('ij,bj->bi', self.C, x) + torch.einsum('ij,bj->bi', self.D, u_t)
-            outputs.append(y_t)
-        return torch.stack(outputs, dim=0)
+    def forward(self, u: torch.Tensor) -> torch.Tensor:
+        # Delegate the recurrence to a TorchScript-compiled function.
+        return ssm_forward(u, self.A, self.B, self.C, self.D)
+
+@torch.jit.script
+def ssm_forward(u: torch.Tensor, A: torch.Tensor, B: torch.Tensor, C: torch.Tensor, D: torch.Tensor) -> torch.Tensor:
+    # u: (T, N, num_features)
+    T, N, _ = u.shape
+    d_state = A.size(0)
+    # Initialize hidden state x: (N, d_state)
+    x = torch.zeros(N, d_state, device=u.device)
+    outputs = []  # Will hold outputs per time step: each is (N, num_features)
+    for t in range(T):
+        u_t = u[t]  # Shape: (N, num_features)
+        # Compute the new hidden state with matrix multiplications and tanh nonlinearity.
+        # Using '@' (matmul) can be more efficient than einsum.
+        x = torch.tanh(x @ A.t() + u_t @ B.t())
+        # Compute output: (N, num_features)
+        y_t = x @ C.t() + u_t @ D.t()
+        outputs.append(y_t)
+    return torch.stack(outputs, dim=0)  # (T, N, num_features)
+
+
 
 
 class PositionalEncoding(nn.Module):
