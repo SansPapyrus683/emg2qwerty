@@ -30,7 +30,7 @@ specaug:
 
 gaussian_noise:
   _target_: emg2qwerty.transforms.GaussianNoise
-  noise_std: 0.1
+  noise_std: 0.0 # 0.1
 
 transforms:
   train:
@@ -82,6 +82,7 @@ defaults:
   - optimizer: adam
   - lr_scheduler: linear_warmup_cosine_annealing
   - decoder: ctc_greedy
+  # - wandb: default
   - cluster: local
   - _self_
 
@@ -97,7 +98,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 150
+  max_epochs: 125 #150
   default_root_dir: ${hydra:runtime.output_dir}
 
 callbacks:
@@ -127,3 +128,4 @@ hydra:
           - checkpoint
           - cluster
           - trainer.accelerator
+

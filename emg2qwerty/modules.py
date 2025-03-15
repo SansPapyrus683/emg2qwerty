@@ -246,7 +246,8 @@ class TDSLSTMEncoder(nn.Module):
         self,
         num_features: int,
         hidden_size: int,
-        num_layers: int
+        num_layers: int,
+        dropout: float=0.3,
     ) -> None:
         super().__init__()
 
@@ -254,7 +255,8 @@ class TDSLSTMEncoder(nn.Module):
             input_size=num_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            batch_first=False  # Input format is (seq_len, batch, features)
+            batch_first=False,  # Input format is (seq_len, batch, features)
+            dropout=dropout
         )
         self.fn = nn.Linear(hidden_size, num_features)
 
@@ -318,6 +320,7 @@ class TDSGRUEncoder(nn.Module):
         num_features: int,
         hidden_size: int,
         num_layers: int,
+        dropout: float=0.1,
     ) -> None:
         super().__init__()
 
@@ -325,6 +328,7 @@ class TDSGRUEncoder(nn.Module):
             input_size=num_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
+            dropout=dropout,
             batch_first=False  # Input shape is (T, N, n_features)
         )
 
@@ -354,6 +358,7 @@ class TDSRNNEncoder(nn.Module):
         num_features: int,
         hidden_size: int,
         num_layers: int,
+        dropout: float=0.1,
     ) -> None:
         super().__init__()
 
@@ -361,6 +366,7 @@ class TDSRNNEncoder(nn.Module):
             input_size=num_features,
             hidden_size=hidden_size,
             num_layers=num_layers,
+            dropout=dropout,
             batch_first=False  
         )
 
@@ -373,36 +379,77 @@ class TDSRNNEncoder(nn.Module):
 
 
 class TDSSSMEncoder(nn.Module):
-    def __init__(self, num_features, hidden_size):
+    def __init__(self, num_features: int, hidden_size: int | None = None) -> None:
         super().__init__()
-        self.num_features = num_features
-        self.hidden_size = hidden_size
+        # Use provided hidden_size or default to num_features
+        self.d_state = hidden_size if hidden_size is not None else num_features
+        scale = 0.02
+        self.A = nn.Parameter(torch.randn(self.d_state, self.d_state) * scale)
+        self.B = nn.Parameter(torch.randn(self.d_state, num_features) * scale)
+        self.C = nn.Parameter(torch.randn(num_features, self.d_state) * scale)
+        self.D = nn.Parameter(torch.randn(num_features, num_features) * scale)
 
-        # State transition parameters
-        self.A = nn.Parameter(torch.randn(hidden_size, hidden_size))  # Transition matrix
-        self.B = nn.Parameter(torch.randn(num_features, hidden_size))  # Input projection
-        
-        # Observation parameters
-        self.C = nn.Parameter(torch.randn(hidden_size, num_features))  # Output projection
-        self.D = nn.Parameter(torch.randn(num_features, num_features))  # Skip connection
+    def forward(self, u: torch.Tensor) -> torch.Tensor:
+        # Delegate the recurrence to a TorchScript-compiled function.
+        return ssm_forward(u, self.A, self.B, self.C, self.D)
+
+@torch.jit.script
+def ssm_forward(u: torch.Tensor, A: torch.Tensor, B: torch.Tensor, C: torch.Tensor, D: torch.Tensor) -> torch.Tensor:
+    # u: (T, N, num_features)
+    T, N, _ = u.shape
+    d_state = A.size(0)
+    # Initialize hidden state x: (N, d_state)
+    x = torch.zeros(N, d_state, device=u.device)
+    outputs = []  # Will hold outputs per time step: each is (N, num_features)
+    for t in range(T):
+        u_t = u[t]  # Shape: (N, num_features)
+        # Compute the new hidden state with matrix multiplications and tanh nonlinearity.
+        # Using '@' (matmul) can be more efficient than einsum.
+        x = torch.tanh(x @ A.t() + u_t @ B.t())
+        # Compute output: (N, num_features)
+        y_t = x @ C.t() + u_t @ D.t()
+        outputs.append(y_t)
+    return torch.stack(outputs, dim=0)  # (T, N, num_features)
+
+
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-torch.log(torch.tensor(10000.0)) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
 
     def forward(self, x):
-        # x shape: (T, batch_size, num_features)
-        T, batch_size, _ = x.shape
-        device = x.device
-        
-        # Initialize hidden state
-        h = torch.zeros(batch_size, self.hidden_size, device=device)
-        
-        outputs = []
-        for t in range(T):
-            x_t = x[t]  # (batch_size, num_features)
-            
-            # State transition
-            h = torch.matmul(h, self.A) + torch.matmul(x_t, self.B)
+        # x: (T, N, d_model)
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
 
-            # Compute output
-            y_t = torch.matmul(h, self.C) + torch.matmul(x_t, self.D)
-            outputs.append(y_t)
-        
-        return torch.stack(outputs)
+
+class TDSTransformerEncoder(nn.Module):
+    def __init__(self, num_features, nhead, num_layers, dim_feedforward=2048, dropout=0.1):
+        super().__init__()
+        self.pos_encoder = PositionalEncoding(num_features, dropout)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=num_features,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers,
+            enable_nested_tensor=True
+        )
+    
+    def forward(self, src):
+        src = src.permute(1, 0, 2)
+        src = self.pos_encoder(src)
+        output = self.transformer_encoder(src)
+        output = output.permute(1, 0, 2)
+        return output

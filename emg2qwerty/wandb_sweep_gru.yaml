@@ -1,0 +1,51 @@
+program: emg2qwerty.train
+method: bayes
+metric:
+  name: val/CER
+  goal: minimize
+
+parameters:
+  optimizer.lr:
+    min: 0.0001
+    max: 0.01
+    distribution: log_uniform_values
+  batch_size:
+    values: [32]
+  lr_scheduler.scheduler.warmup_epochs:
+    min: 1
+    max: 20
+    distribution: int_uniform
+  trainer.max_epochs:
+    values: [75, 100, 125]
+  module.mlp_features:
+    values: [[384]]
+  module.in_features:
+    values: [528]
+  datamodule.window_length:
+    values: [4000, 8000, 12000]
+  module.hidden_size:
+    min: 100
+    max: 300
+    distribution: int_uniform
+  module.num_layers:
+    min: 3
+    max: 6
+    distribution: int_uniform
+  lr_scheduler.scheduler.warmup_start_lr:
+    min: 1e-7
+    max: 1e-5
+    distribution: log_uniform_values
+  lr_scheduler.scheduler.eta_min:
+    min: 1e-6
+    max: 1e-4
+    distribution: log_uniform_values
+
+early_terminate:
+  type: hyperband
+  min_iter: 5
+
+command:
+  - C:/Users/User/env/emg2qwerty/Scripts/python.exe
+  - -m
+  - emg2qwerty.train
+  - ${args_no_hyphens}
